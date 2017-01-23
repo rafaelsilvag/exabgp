@@ -1,3 +1,4 @@
+import struct
 import sys
 import json
 
@@ -53,21 +54,21 @@ class Transcoder (object):
 			self.negotiated.sent(self.seen_open['send'])
 			self.negotiated.received(self.seen_open['receive'])
 
-	def _from_json (self, string):
+	def _from_json (self, json_string):
 		try:
-			parsed = json.loads(string)
+			parsed = json.loads(json_string)
 		except ValueError:
 			print >> sys.stderr, 'invalid JSON message'
 			sys.exit(1)
 
 		if parsed.get('exabgp','0.0.0') != json_version:
-			print >> sys.stderr, 'invalid json version', string
+			print >> sys.stderr, 'invalid json version', json_string
 			sys.exit(1)
 
 		content = parsed.get('type','')
 
 		if not content:
-			print >> sys.stderr, 'invalid json content', string
+			print >> sys.stderr, 'invalid json content', json_string
 			sys.exit(1)
 
 		neighbor = _FakeNeighbor(
@@ -79,7 +80,7 @@ class Transcoder (object):
 
 		if content == 'state':
 			self._state()
-			return string
+			return json_string
 
 		direction = parsed['neighbor']['direction']
 		category = parsed['neighbor']['message']['category']
@@ -97,10 +98,50 @@ class Transcoder (object):
 
 		if content == 'notification':
 			message = Notification.unpack_message(raw)
+
+			if (message.code, message.subcode) != (6, 2):
+				message.data = data if not len([_ for _ in data if _ not in string.printable]) else hexstring(data)
+				return self.encoder.notification(neighbor,direction,message,header,body)
+
+			if len(data) == 0:
+				# shutdown without shutdown communication (the old fashioned way)
+				message.data = ''
+				return self.encoder.notification(neighbor,direction,message,header,body)
+
+			# draft-ietf-idr-shutdown or the peer was using 6,2 with data
+
+			shutdown_length  = ord(data[0])
+			data = data[1:]
+
+			if shutdown_length == 0:
+				message.data = "empty Shutdown Communication."
+				# move offset past length field
+				return self.encoder.notification(neighbor,direction,message,header,body)
+
+			if len(data) < shutdown_length:
+				message.data = "invalid Shutdown Communication (buffer underrun) length : %i [%s]" % (shutdown_length, hexstring(data))
+				return self.encoder.notification(neighbor,direction,message,header,body)
+
+			if shutdown_length > 128:
+				message.data = "invalid Shutdown Communication (too large) length : %i [%s]" % (shutdown_length, hexstring(data))
+				return self.encoder.notification(neighbor,direction,message,header,body)
+
+			try:
+				message.data = 'Shutdown Communication: "%s"' % \
+					data[:shutdown_length].decode('utf-8').replace('\r',' ').replace('\n',' ')
+			except UnicodeDecodeError:
+				message.data = "invalid Shutdown Communication (invalid UTF-8) length : %i [%s]" % (shutdown_length, hexstring(data))
+				return self.encoder.notification(neighbor,direction,message,header,body)
+
+
+			trailer = data[shutdown_length:]
+			if trailer:
+				message.data += ", trailing data: " + hexstring(trailer)
+
 			return self.encoder.notification(neighbor,direction,message,header,body)
 
 		if not self.negotiated:
-			print >> sys.stderr, 'invalid message sequence, open not exchange not complete', string
+			print >> sys.stderr, 'invalid message sequence, open not exchange not complete', json_string
 			sys.exit(1)
 
 		message = Message.unpack(category,raw,self.negotiated)
