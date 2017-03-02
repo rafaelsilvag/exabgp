@@ -23,7 +23,7 @@ from exabgp.bgp.message.notification import Notify
 
 # ------------ EVPN Prefix Advertisement NLRI ------------
 # As described here:
-# http://tools.ietf.org/html/draft-ietf-bess-evpn-prefix-advertisement-01
+# https://tools.ietf.org/html/draft-ietf-bess-evpn-prefix-advertisement-01
 
 # +---------------------------------------+
 # |      RD   (8 octets)                  |
@@ -153,7 +153,7 @@ class Prefix (EVPN):
 			gwip = IP.unpack(data[:16])
 			data = data[16:]
 		else:
-			raise Notify(3,5,"Data field length is given as %d, but EVPN route currently support only IPv4 or IPv6(34 or 58)" % iplen)
+			raise Notify(3,5,"Data field length is given as %d, but EVPN route currently support only IPv4 or IPv6(34 or 58)" % datalen)
 
 		label = Labels.unpack(data[:3])
 
@@ -169,5 +169,6 @@ class Prefix (EVPN):
 		content += '%s, ' % self.etag.json()
 		content += '%s, ' % self.label.json()
 		content += '"ip": "%s", ' % str(self.ip)
+		content += '"iplen": %d, ' % self.iplen
 		content += '"gateway": "%s" ' % str(self.gwip)
 		return '{%s}' % content
