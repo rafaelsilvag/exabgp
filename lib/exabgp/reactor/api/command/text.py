@@ -18,7 +18,7 @@ from exabgp.bgp.message import OUT
 from exabgp.configuration.static import ParseStaticRoute
 
 from exabgp.version import version as _version
-
+from exabgp.configuration.environment import environment
 
 class Text (object):
 	callback = {}
@@ -32,6 +32,7 @@ class Text (object):
 def _show_routes_callback(reactor, service, last, route_type, advertised, extensive):
 	def callback ():
 		families = None
+		lines_per_yield = environment.settings().api.chunk
 		if last in ('routes', 'extensive', 'static', 'flow', 'l2vpn'):
 			peers = reactor.peers.keys()
 		else:
@@ -42,43 +43,51 @@ def _show_routes_callback(reactor, service, last, route_type, advertised, extens
 				continue
 			if advertised:
 				families = peer._outgoing.proto.negotiated.families if peer._outgoing.proto else []
-			for change in list(peer.neighbor.rib.outgoing.sent_changes(families)):
-				if isinstance(change.nlri, route_type):
-					if extensive:
-						reactor.answer(service,'neighbor %s %s' % (peer.neighbor.name(),change.extensive()))
-					else:
-						reactor.answer(service,'neighbor %s %s' % (peer.neighbor.peer_address,str(change.nlri)))
-					yield True
+			routes = list(peer.neighbor.rib.outgoing.sent_changes(families))
+			while routes:
+				changes, routes = routes[:lines_per_yield], routes[lines_per_yield:]
+				for change in changes:
+					if isinstance(change.nlri, route_type):
+						if extensive:
+							reactor.answer(service,'neighbor %s %s' % (peer.neighbor.name(),change.extensive()))
+						else:
+							reactor.answer(service,'neighbor %s %s' % (peer.neighbor.peer_address,str(change.nlri)))
+				yield True
 		reactor.answer(service,'done')
 	return callback
 
 @Text('shutdown')
 def shutdown (self, reactor, service, command):
 	reactor.answer(service,'shutdown in progress')
+	reactor.answer(service,'done')
 	return reactor.api.shutdown()
 
 
 @Text('reload')
 def reload (self, reactor, service, command):
 	reactor.answer(service,'reload in progress')
+	reactor.answer(service,'done')
 	return reactor.api.reload()
 
 
 @Text('restart')
 def restart (self, reactor, service, command):
 	reactor.answer(service,'restart in progress')
+	reactor.answer(service,'done')
 	return reactor.api.restart()
 
 
 @Text('version')
 def version (self, reactor, service, command):
 	reactor.answer(service,'exabgp %s\n' % _version)
+	reactor.answer(service,'done')
 	return True
 
 
 @Text('#')
-def version (self, reactor, service, command):
+def comment (self, reactor, service, command):
 	self.logger.processes(command.lstrip().lstrip('#').strip())
+	reactor.answer(service,'done')
 	return True
 
 
@@ -140,6 +149,7 @@ def show_neighbor_status (self, reactor, service, command):
 			peer = reactor.peers.get(peer_name, None)
 			if not peer:
 				continue
+			peer_name = peer.neighbor.name()
 			detailed_status = peer.detailed_link_status()
 			families = peer.negotiated_families()
 			if families:
@@ -351,9 +361,11 @@ def withdraw_route (self, reactor, service, line):
 			reactor.answer(service,'done')
 		except ValueError:
 			self.log_failure('issue parsing the route')
+			reactor.answer(service,'error')
 			yield True
 		except IndexError:
 			self.log_failure('issue parsing the route')
+			reactor.answer(service,'error')
 			yield True
 
 	reactor.plan(callback(),'withdraw_route')
@@ -702,6 +714,7 @@ def announce_operational (self, reactor, service, command):
 		reactor.answer(service,'done')
 
 	if (command.split() + ['be','safe'])[2].lower() not in ('asm','adm','rpcq','rpcp','apcq','apcp','lpcq','lpcp'):
+		reactor.answer(service,'done')
 		return False
 
 	try:
