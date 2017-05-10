@@ -7,6 +7,8 @@ Created by Thomas Mangin on 2012-12-30.
 Copyright (c) 2009-2015 Exa Networks. All rights reserved.
 """
 
+from exabgp.util import concat_bytes
+
 class APIOptions (dict):
 	def set (self, key, value):
 		self[key] = self.get(key,False) or value
@@ -22,10 +24,3 @@ class APIOptions (dict):
 
 	def __missing__ (self, key):
 		return False
-
-
-def hexstring (value):
-	def spaced (value):
-		for v in value:
-			yield '%02X' % ord(v)
-	return b''.join(spaced(value))
