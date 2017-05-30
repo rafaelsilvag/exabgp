@@ -4,7 +4,7 @@
 setup.py
 
 Created by Thomas Mangin on 2011-01-24.
-Copyright (c) 2009-2015 Exa Networks. All rights reserved.
+Copyright (c) 2009-2017 Exa Networks. All rights reserved.
 """
 
 import os
@@ -19,11 +19,15 @@ import six
 CHANGELOG = os.path.join(os.getcwd(),os.path.dirname(sys.argv[0]),'CHANGELOG')
 VERSION_PY = os.path.join(os.getcwd(),os.path.dirname(sys.argv[0]),'lib/exabgp/version.py')
 DEBIAN = os.path.join(os.getcwd(),os.path.dirname(sys.argv[0]),'debian/changelog')
+EGG = os.path.join(os.getcwd(),os.path.dirname(sys.argv[0]),'lib/exabgp.egg-info')
+BUILD_EXABGP = os.path.join(os.getcwd(),os.path.dirname(sys.argv[0]),'build/lib/exabgp')
+BUILD_ROOT = os.path.join(os.getcwd(),os.path.dirname(sys.argv[0]),'build')
+
 
 dryrun = False
 
-json_version = '3.9.0'
-text_version = '3.9.0'
+json_version = '4.0.0'
+text_version = '4.0.0'
 
 version_template = """\
 import os
@@ -76,16 +80,17 @@ def versions ():
 
 
 def remove_egg ():
-	if os.path.exists('lib/exabgp.egg-info'):
+	if os.path.exists(EGG):
 		print('removing left-over egg')
-		rmtree('lib/exabgp.egg-info')
-	if os.path.exists('build/lib/exabgp'):
+		rmtree(EGG)
+	if os.path.exists(BUILD_EXABGP):
 		print('removing left-over egg')
-		rmtree('build')
+		rmtree(BUILD_ROOT)
 
+
+remove_egg()
 
 if sys.argv[-1] == 'cleanup':
-	remove_egg()
 	sys.exit(0)
 
 if sys.argv[-1] == 'current':
@@ -97,14 +102,21 @@ if sys.argv[-1] == 'next':
 	sys.exit(0)
 
 def set_version ():
-	git_version = os.popen('git describe --tags').read().strip()
+	next_version = versions()[0]
+	git_version = os.popen('git rev-parse --short HEAD').read().strip()
+	full_version = "%s-%s" % (next_version,git_version)
 
 	with open(VERSION_PY,'w') as version_file:
-		version_file.write(version_template % (git_version,json_version,text_version))
+		version_file.write(version_template % (
+			full_version,
+			json_version,
+			text_version
+		))
 
 	version = imp.load_source('version',VERSION_PY).version
 
-	if version != git_version:
+	if version != full_version:
+		import pdb; pdb.set_trace()
 		print('version setting failed')
 		sys.exit(1)
 
@@ -170,9 +182,11 @@ if sys.argv[-1] == 'release':
 	print('figuring valid next release version')
 
 	tags = os.popen('git tag').read().split('-')[0].strip()
-	versions = [[int(_) for _ in tag.split('.')]  for tag in tags.split('\n')
-                    if tag.count('.') == 2 and tag[0].isdigit()]
-	latest = sorted(versions)[-1]
+	tag_versions = [
+		[int(_) for _ in tag.split('.')]  for tag in tags.split('\n')
+		if tag.count('.') == 2 and tag[0].isdigit()
+	]
+	latest = sorted(tag_versions)[-1]
 	next = [
 		'.'.join([str(_) for _ in (latest[0], latest[1], latest[2]+1)]),
 		'.'.join([str(_) for _ in (latest[0], latest[1]+1, 0)]),
@@ -182,24 +196,30 @@ if sys.argv[-1] == 'release':
 	print('valid versions are:', ', '.join(next))
 	print('checking the CHANGELOG uses one of them')
 
-	version = versions()[0]
-
-	if version.count('.') != 2:
+	next_version = versions()[0]
+	if next_version.count('.') != 2:
 		print('invalid new version in CHANGELOG')
 		sys.exit(1)
 
-	print('ok, next release is %s' % version)
+	print('ok, next release is %s' % next_version)
 	print('checking that this release is not already tagged')
 
-	if version in tags.split('\n'):
+	if next_version in tags.split('\n'):
 		print('this tag was already released')
 		sys.exit(1)
 
 	print('ok, this is a new release')
 	print('rewriting lib/exabgp/version.py')
 
-	with open('lib/exabgp/version.py','w') as version_file:
-		version_file.write(version_template % version)
+	git_version = os.popen('git rev-parse --short HEAD').read().strip()
+	full_version = "%s-%s" % (next_version,git_version)
+
+	with open(VERSION_PY,'w') as version_file:
+		version_file.write(version_template % (
+			full_version,
+			json_version,
+			text_version
+		))
 
 	debian()
 
@@ -218,13 +238,13 @@ if sys.argv[-1] == 'release':
 			commit = False
 
 	if commit is True:
-		command = "git commit -a -m 'updating version to %s'" % version
+		command = "git commit -a -m 'updating version to %s'" % next_version
 		print('\n>', command)
 
 		ret = dryrun or os.system(command)
 		if ret:
 			print('return code is', ret)
-			print('could not commit version change (%s)' % version)
+			print('could not commit version change (%s)' % next_version)
 			sys.exit(1)
 		print('version.py was updated')
 	elif commit is False:
@@ -234,13 +254,13 @@ if sys.argv[-1] == 'release':
 		print('version.py was already set')
 
 	print('tagging the new version')
-	command = "git tag -a %s -m 'release %s'" % (version,version)
+	command = "git tag -a %s -m 'release %s'" % (next_version,next_version)
 	print('\n>', command)
 
 	ret = dryrun or os.system(command)
 	if ret:
 		print('return code is', ret)
-		print('could not tag version (%s)' % version)
+		print('could not tag version (%s)' % next_version)
 		sys.exit(1)
 
 	print('pushing the new tag to local repo')
@@ -268,7 +288,7 @@ if sys.argv[-1] in ('pypi'):
 	print()
 	print('updating PyPI')
 
-	command = "python setup.py sdist upload"
+	command = "python3 setup.py sdist upload"
 	print('\n>', command)
 
 	ret = dryrun or os.system(command)
@@ -279,7 +299,7 @@ if sys.argv[-1] in ('pypi'):
 
 	remove_egg()
 
-	command = "python setup.py bdist_wheel upload"
+	command = "python3 setup.py bdist_wheel upload"
 	print('\n>', command)
 
 	ret = dryrun or os.system(command)
@@ -337,7 +357,7 @@ if os_name != 'NetBSD':
 	if sys.argv[-1] == 'systemd':
 		files_definition.append(('/usr/lib/systemd/system',filesOf('etc/systemd')))
 
-version = imp.load_source('version','lib/exabgp/version.py').version
+version = imp.load_source('version','lib/exabgp/version.py').version.split('-')[0]
 
 try:
 	description_rst = open('PYPI.rst').read() % {'version': version}
@@ -372,6 +392,7 @@ setup(
 		'Operating System :: Microsoft :: Windows',
 		'Programming Language :: Python',
 		'Programming Language :: Python :: 2.7',
+		'Programming Language :: Python :: 3.6',
 		'Topic :: Internet',
 	],
 	entry_points={

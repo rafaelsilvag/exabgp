@@ -297,6 +297,7 @@ class Configuration (_Configuration):
 
 		self.process.clear()
 		self.template.clear()
+		self.template_neighbor.clear()
 		self.neighbor.clear()
 		self.family.clear()
 		self.capability.clear()
@@ -396,6 +397,9 @@ class Configuration (_Configuration):
 			api = neighbor.api
 			for process in api.get('processes',[]):
 				self.processes.setdefault(process,{})['neighbor-changes'] = api['neighbor-changes']
+				self.processes.setdefault(process,{})['negotiated'] = api['negotiated']
+				self.processes.setdefault(process,{})['fsm'] = api['fsm']
+				self.processes.setdefault(process,{})['signal'] = api['signal']
 				for way in ('send','receive'):
 					for name in ('parsed','packets','consolidate'):
 						key = "%s-%s" % (way,name)

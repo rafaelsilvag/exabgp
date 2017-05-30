@@ -25,6 +25,8 @@ from exabgp.logger import Logger
 from exabgp.version import json as json_version
 from exabgp.version import text as text_version
 
+from exabgp.configuration.environment import environment
+
 
 # pylint: disable=no-self-argument,not-callable,unused-argument,invalid-name
 
@@ -42,7 +44,6 @@ def preexec_helper ():
 
 class Processes (object):
 	# how many time can a process can respawn in the time interval
-	respawn_number = 5
 	respawn_timemask = 0xFFFFFF - 0b111111
 	# '0b111111111111111111000000' (around a minute, 63 seconds)
 
@@ -53,6 +54,10 @@ class Processes (object):
 		self.reactor = reactor
 		self.clean()
 		self.silence = False
+		self._buffer = {}
+
+		self.respawn_number = 5 if environment.settings().api.respawn else 0
+		self.terminate = environment.settings().api.terminate
 
 	def clean (self):
 		self._process = {}
@@ -60,20 +65,20 @@ class Processes (object):
 		self._broken = []
 		self._respawning = {}
 
-	def handle_respawn (self):
+	def handle_respawn (self, process):
 		self.logger.processes("Issue with the process, restarting it")
 		self._terminate(process)
 		self._start(process)
 
-	def handle_terminate (self):
+	def handle_terminate (self, process):
 		self.logger.processes("Issue with the process, terminating it")
 		self._terminate(process)
 
-	def handle_problem (self):
+	def handle_problem (self, process):
 		if self.reactor.respawn:
-			self.handle_respawn()
+			self.handle_respawn(process)
 		else:
-			self.handle_terminate()
+			self.handle_terminate(process)
 
 	def _terminate (self, process):
 		self.logger.processes("Terminating process %s" % process)
@@ -140,7 +145,7 @@ class Processes (object):
 						# we are respawning too fast
 						if self._respawning[process][around_now] > self.respawn_number:
 							self.logger.processes(
-								"Too many respawn for %s (%d) terminating program" % (process,self.respawn_number),
+								"Too many death for %s (%d) terminating program" % (process,self.respawn_number),
 								'critical'
 							)
 							raise ProcessError()
@@ -177,7 +182,6 @@ class Processes (object):
 
 	def received (self):
 		consumed_data = False
-		buffered = {}
 
 		for process in list(self._process):
 			try:
@@ -186,7 +190,7 @@ class Processes (object):
 				# proc.poll returns None if the process is still fine
 				# -[signal], like -15, if the process was terminated
 				if poll is not None:
-					self.handle_problem()
+					self.handle_problem(process)
 					return
 				r,_,_ = select.select([proc.stdout,],[],[],0)
 				if r:
@@ -201,15 +205,15 @@ class Processes (object):
 								# process is fine, we received an empty line because
 								# we're doing .readline() on a non-blocking pipe and
 								# the process maybe has nothing to send yet
-								self.handle_problem()
+								self.handle_problem(process)
 								return
-							raw = buffered.get(process,'') + buf
+							raw = self._buffer.get(process,'') + buf
 
 							if not raw.endswith('\n'):
-								buffered[process] = raw
-								continue
+								self._buffer[process] = raw
+								break
 
-							buffered[process] = ''
+							self._buffer[process] = ''
 							line = raw.rstrip()
 							consumed_data = True
 							self.logger.processes("Command from process %s : %s " % (process,line))
@@ -218,7 +222,7 @@ class Processes (object):
 					except IOError as exc:
 						if not exc.errno or exc.errno in error.fatal:
 							# if the program exits we can get an IOError with errno code zero !
-							self.handle_problem()
+							self.handle_problem(process)
 						elif exc.errno in error.block:
 							# we often see errno.EINTR: call interrupted and
 							# we most likely have data, we will try to read them a the next loop iteration
@@ -227,11 +231,14 @@ class Processes (object):
 							self.logger.processes("unexpected errno received from forked process (%s)" % errstr(exc))
 					except StopIteration:
 						if not consumed_data:
-							self.handle_problem()
+							self.handle_problem(process)
 			except (subprocess.CalledProcessError,OSError,ValueError):
-				self.handle_problem()
+				self.handle_problem(process)
 
 	def write (self, process, string, neighbor=None):
+		if string is None:
+			return True
+
 		# XXX: FIXME: This is potentially blocking
 		while True:
 			try:
@@ -285,6 +292,21 @@ class Processes (object):
 	def down (self, neighbor, reason):
 		for process in self._notify(neighbor,'neighbor-changes'):
 			self.write(process,self._encoder[process].down(neighbor,reason),neighbor)
+
+	@silenced
+	def negotiated (self, neighbor, negotiated):
+		for process in self._notify(neighbor,'negotiated'):
+			self.write(process,self._encoder[process].negotiated(neighbor,negotiated),neighbor)
+
+	@silenced
+	def fsm (self, neighbor, fsm):
+		for process in self._notify(neighbor,'fsm'):
+			self.write(process,self._encoder[process].fsm(neighbor,fsm),neighbor)
+
+	@silenced
+	def signal (self, neighbor, signal):
+		for process in self._notify(neighbor,'signal'):
+			self.write(process,self._encoder[process].signal(neighbor,signal),neighbor)
 
 	@silenced
 	def packets (self, neighbor, direction, category, header, body):

@@ -45,16 +45,16 @@ def _show_routes_callback(reactor, service, last, route_type, advertised, extens
 			if not peer:
 				continue
 			if advertised:
-				families = peer._outgoing.proto.negotiated.families if peer._outgoing.proto else []
+				families = peer.proto.negotiated.families if peer.proto else []
 			routes = list(peer.neighbor.rib.outgoing.sent_changes(families))
 			while routes:
 				changes, routes = routes[:lines_per_yield], routes[lines_per_yield:]
 				for change in changes:
 					if isinstance(change.nlri, route_type):
 						if extensive:
-							reactor.answer(service,'neighbor %s %s' % (peer.neighbor.name(),change.extensive()))
+							reactor.always_answer(service,'neighbor %s %s' % (peer.neighbor.name(),change.extensive()))
 						else:
-							reactor.answer(service,'neighbor %s %s' % (peer.neighbor.peer_address,str(change.nlri)))
+							reactor.always_answer(service,'neighbor %s %s' % (peer.neighbor.peer_address,str(change.nlri)))
 				yield True
 		reactor.answer(service,'done')
 	return callback
@@ -83,7 +83,7 @@ def restart (self, reactor, service, command):
 
 @Text('version')
 def version (self, reactor, service, command):
-	reactor.answer(service,'exabgp %s\n' % _version)
+	reactor.always_answer(service,'exabgp %s\n' % _version)
 	reactor.answer(service,'done')
 	return True
 
@@ -155,11 +155,11 @@ def show_neighbor_status (self, reactor, service, command):
 			if not peer:
 				continue
 			peer_name = peer.neighbor.name()
-			detailed_status = peer.detailed_link_status()
+			detailed_status = peer.fsm.name()
 			families = peer.negotiated_families()
 			if families:
 				families = "negotiated %s" % families
-			reactor.answer(service, "%s %s state %s" % (peer_name, families, detailed_status))
+			reactor.always_answer(service, "%s %s state %s" % (peer_name, families, detailed_status))
 			yield True
 		reactor.answer(service,"done")
 

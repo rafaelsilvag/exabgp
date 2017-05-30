@@ -11,6 +11,7 @@ import os
 import socket
 import sys
 import time
+import signal
 
 from exabgp.vendoring import six
 
@@ -20,10 +21,13 @@ from exabgp.bgp.message import Message
 from exabgp.bgp.message import IN
 
 from exabgp.configuration.environment import environment
+from exabgp.bgp.message.open.capability.refresh import REFRESH
 
 
 if sys.version_info > (3,):
 	long = int
+
+SIGNAL_NAME = dict((k, v) for v, k in reversed(sorted(signal.__dict__.items())) if v.startswith('SIG') and not v.startswith('SIG_'))
 
 
 def nop (_): return _
@@ -46,8 +50,19 @@ class JSON (object):
 		self._count[neighbor.uid] = increased
 		return increased
 
-	def _string (self, _):
-		return '%s' % _ if issubclass(_.__class__,int) or issubclass(_.__class__,long) or ('{' in str(_)) else '"%s"' % _
+	def _string (self, object):
+		if issubclass(object.__class__,bool):
+			return 'true' if object else 'false'
+		if issubclass(object.__class__,long):
+			return '%s' % object
+		if issubclass(object.__class__,int):
+			return '%s' % object
+		string = '%s' % object
+		if '{' in string:
+			return string
+		if '[' in string:
+			return string
+		return '"%s"' % object
 
 	def _header (self, content, header, body, neighbor,message_type=None):
 		peer     = '"host" : "%s", '   % socket.gethostname()
@@ -104,6 +119,9 @@ class JSON (object):
 	def _json_kv (self, extra):
 		return ", ".join('"%s": %s' % (k,v.json()) for (k,v) in six.iteritems(extra))
 
+	def _json_list (self,extra):
+		return ", ".join('%s' % (v.json()) for v in six.iteritems(extra))
+
 	def _minimalkv (self, extra):
 		return ", ".join('"%s": %s' % (k,self._string(v)) for (k,v) in six.iteritems(extra) if v)
 
@@ -129,6 +147,34 @@ class JSON (object):
 		return self._header(self._kv({
 			'notification': 'shutdown',
 		}),'','',None,message_type='notification')
+
+	def negotiated (self, neighbor, negotiated):
+		return self._header(self._neighbor(neighbor,None,self._kv({
+			'negotiated':'{ %s } ' % self._kv({
+				'message_size': negotiated.msg_size,
+				'hold_time':    negotiated.holdtime,
+				'asn4':         negotiated.asn4,
+				'multisession': negotiated.multisession,
+				'operational':  negotiated.operational,
+				'refresh':      REFRESH.json(negotiated.refresh),
+				'families': '[ %s ]' % ' ,'.join(['"%s %s"' % family for family in negotiated.families]),
+				'add_path': '{ "send": %s, "receive": %s }' % (
+					'[ %s ]' % ', '.join([family for family in negotiated.families if negotiated.addpath.send(*family)]),
+					'[ %s ]' % ', '.join(['"%s %s"' % family for family in negotiated.families if negotiated.addpath.receive(*family)]),
+				),
+			})
+		})),'','',neighbor,message_type='negotiated')
+
+	def fsm (self, neighbor, fsm):
+		return self._header(self._neighbor(neighbor,None,self._kv({
+			'state': fsm.name()
+		})),'','',neighbor,message_type='fsm')
+
+	def signal (self, neighbor, signal):
+		return self._header(self._neighbor(neighbor,None,self._kv({
+			'code': '%d' % signal,
+			'name': SIGNAL_NAME.get(signal,'UNKNOWN'),
+		})),'','',neighbor,message_type='signal')
 
 	def notification (self, neighbor, direction, message, header, body):
 		return self._header(self._neighbor(neighbor,direction,self._kv({

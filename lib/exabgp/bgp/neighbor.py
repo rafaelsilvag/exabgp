@@ -34,6 +34,7 @@ class Neighbor (object):
 		self.host_name = None
 		self.domain_name = None
 		self.local_address = None
+		self.range_size = 1
 		# local_address uses auto discovery
 		self.auto_discovery = False
 		self.peer_address = None
@@ -60,6 +61,9 @@ class Neighbor (object):
 		self.listen = 0
 		# the port to connect to
 		self.connect = 0
+
+		# was this Neighbor generated from a range
+		self.generated = False
 
 		# capability
 		self.route_refresh = False
@@ -110,7 +114,14 @@ class Neighbor (object):
 			session = '/'.join("%s-%s" % (afi.name(),safi.name()) for (afi,safi) in self.families())
 		else:
 			session = 'in-open'
-		return "neighbor %s local-ip %s local-as %s peer-as %s router-id %s family-allowed %s" % (self.peer_address,self.local_address,self.local_as,self.peer_as,self.router_id,session)
+		return "neighbor %s local-ip %s local-as %s peer-as %s router-id %s family-allowed %s" % (
+			self.peer_address,
+			self.local_address if self.peer_address is not None else 'auto',
+			self.local_as if self.local_as is not None else 'auto',
+			self.peer_as if self.peer_as is not None else 'auto',
+			self.router_id,
+			session
+		)
 
 	def families (self):
 		# this list() is important .. as we use the function to modify self._families
@@ -137,19 +148,23 @@ class Neighbor (object):
 			return 'local-address'
 		if self.peer_address is None:
 			return 'peer-address'
-		if self.local_as is None:
-			return 'local-as'
-		if self.peer_as is None:
-			return 'peer-as'
-		if (self.auto_discovery or self.peer_address.afi == AFI.ipv6) and not self.router_id:
+		if self.auto_discovery and not self.router_id:
+			return 'router-id'
+		if self.peer_address.afi == AFI.ipv6 and not self.router_id:
 			return 'router-id'
 		return ''
 
 	# This function only compares the neighbor BUT NOT ITS ROUTES
 	def __eq__ (self, other):
+		# Comparing local_address is skipped in the case where either
+		# peer is configured to auto discover its local address. In
+		# this case it can happen that one local_address is None and
+		# the other one will be set to the auto disocvered IP address.
+		auto_discovery = self.auto_discovery or other.auto_discovery
 		return \
 			self.router_id == other.router_id and \
-			self.local_address == other.local_address and \
+			(auto_discovery or self.local_address == other.local_address) and \
+			self.auto_discovery == other.auto_discovery and \
 			self.local_as == other.local_as and \
 			self.peer_address == other.peer_address and \
 			self.peer_as == other.peer_as and \

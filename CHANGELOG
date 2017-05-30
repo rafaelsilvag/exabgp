@@ -3,6 +3,23 @@ Version explained:
  minor : increase on risk of code breakage during a major release
  bug   : increase on bug or incremental changes
 
+Version 4.0.1
+ * Change: makes python3 the default interpreter
+ * Change: major change to log output format
+ * Change: refactor the core for much faster session establishment
+ * Fix: correcly parse single element flow rule
+    reported by: Christoph Loibl
+ * Fix: much faster session establishment
+ * Feature: allow to disable command acknowledgement via environment
+    reported by: nidotech
+ * Feature: https://tools.ietf.org/html/draft-ietf-idr-bgp-prefix-sid-05
+    patch by: Evelio Vila
+ * Feature: added a new API message "negotiated" which gives the negotiated feature of the session
+ * Feature: added a new API message "fsm" which gives the BGP state machine information
+ * Feature: added a new API message "signal" which inform of the signals received by ExaBGP
+ * Feature: it is now possible to use ip/netmask as notation for neighbor
+ * Feature: local-as can be set to "auto", to auto-setup an iBGP session using the OPEN's ASN
+
 Version 4.0.0
  * Feature: add support for interface-set for BGP flowspec routes
  * Change: the configuration format is not compatible with ExaBGP 3.x
@@ -179,6 +196,26 @@ Version 4.0.0
  * Feature: Allow md5 password to be base64 encoded
     patch by: Brian Johnson
 
+Version 3.4.19
+ * Add: IPv6 nlri-mpls to list of enabled protocol (was missing)
+    requested by: adrian62
+ * Fix: encoding of Flow Label requiring more than 2 bytes
+    reported by: BLAKEMMM
+ * Fix: decoding of capability (was potentially over reading)
+ * Fix: trace when trying to access PID file and this is not allowed
+    reported by: George Shuklin
+ * Fix: Remove a peer's RIB cache when it is deleted from the config file
+    patch by: Brian Johnson
+ * Fix: do not crash the reactor when an invalid IP is passed via the API
+    reported by: Yevgeniy Ovsyannikov
+ * Fix: bad defintion of Flow for ICMPType, ICMPCode and Fragment
+    reported by: Christoph Loibl
+ * Feature: allow add-path for mpls-vpn
+    reported by: adrian62
+ * Change: Backported setup.py from master
+ * Feature: added SRPMS for exabgp
+    patch by: Leonardo Amaral
+
 Version 3.4.18
  * Backport: backhole community (RFC 7999)
     original patch by: Job Snijders
@@ -285,7 +322,7 @@ Version 3.4.12
  * Fix: notification messages were not passed to the API
     reported by: Florian Obser
  * Fix: transitivity on extended community
-    patch by: Thomas Morin 
+    patch by: Thomas Morin
  * Fix: bad reporting of VPLS information in JSON
  * Fix: wrong SAFI on MPLS routes
     reported by: Hideaki HAYASHI
@@ -293,7 +330,7 @@ Version 3.4.12
     reported by: Alvaro Pereira
  * Fix: decoding of Update
  * Fix: Flow redirect to nexhop encoding
-    reported by: Mickael Marchand (Thank you to Peng Xiao and Nicolas Fevrier for their help) 
+    reported by: Mickael Marchand (Thank you to Peng Xiao and Nicolas Fevrier for their help)
  * Fix/Improve: JSON for flow spec
  * Fix/Improve: redirect-to-nexthop
     reported by: Mickael Marchand
@@ -305,7 +342,7 @@ Version 3.4.11
     reported by: Orangefish on github
  * Fix: Shutdown when waiting for a new outgoing connection to establish
  * Fix: JSON counter
-    reported by: 
+    reported by:
  * Fix: JSON flow printing for source and destination
  * Fix: Do not always locate exabgp.env
     reported by: Florian Obser
