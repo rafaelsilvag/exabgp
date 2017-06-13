@@ -7,6 +7,9 @@ Version 4.0.1
  * Change: makes python3 the default interpreter
  * Change: major change to log output format
  * Change: refactor the core for much faster session establishment
+ * Change: JSON format for extended-community now reports both the value and decoded string
+ * Change: new section: announce { ipv4 { unicast ...; multicast ...; } } same syntax as route ...;
+ * Change: new section: announce { ipv6 { unicast ...; multicast ...; } } same syntax as route ...;
  * Fix: correcly parse single element flow rule
     reported by: Christoph Loibl
  * Fix: much faster session establishment
@@ -19,6 +22,10 @@ Version 4.0.1
  * Feature: added a new API message "signal" which inform of the signals received by ExaBGP
  * Feature: it is now possible to use ip/netmask as notation for neighbor
  * Feature: local-as can be set to "auto", to auto-setup an iBGP session using the OPEN's ASN
+ * Feature: Allow binding to multiple global IP addresses
+ * Feature: Add --validate option to check configuration
+ * Fix: Handle MD5 authentication on global IP addresses
+ * Fix: profiling code
 
 Version 4.0.0
  * Feature: add support for interface-set for BGP flowspec routes

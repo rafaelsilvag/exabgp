@@ -18,7 +18,7 @@ from exabgp.protocol.family import SAFI
 from exabgp.bgp.neighbor import Neighbor
 
 from exabgp.bgp.message import OUT
-from exabgp.bgp.message.open.asn import ASN
+# from exabgp.bgp.message.open.asn import ASN
 from exabgp.bgp.message.open.holdtime import HoldTime
 
 from exabgp.bgp.message.update.nlri.flow import NLRI
@@ -28,6 +28,7 @@ from exabgp.configuration.neighbor.api import ParseAPI
 from exabgp.configuration.family import ParseFamily
 
 from exabgp.configuration.parser import boolean
+from exabgp.configuration.parser import auto_boolean
 from exabgp.configuration.parser import ip
 from exabgp.configuration.parser import peer_ip
 # from exabgp.configuration.parser import asn
@@ -66,7 +67,7 @@ class ParseNeighbor (Section):
 		'outgoing-ttl':  ttl,
 		'incoming-ttl':  ttl,
 		'md5-password':  md5,
-		'md5-base64':    boolean,
+		'md5-base64':    auto_boolean,
 		'md5-ip':        ip,
 		'group-updates': boolean,
 		'auto-flush':    boolean,
@@ -128,6 +129,10 @@ class ParseNeighbor (Section):
 		local = self.scope.pop_context(self.name)
 		neighbor = Neighbor()
 
+		for inherit in local.get('inherit',[]):
+			data = self.scope.template('neighbor',inherit)
+			self.scope.inherit(data)
+
 		# XXX: use the right class for the data type
 		# XXX: we can use the scope.nlri interface ( and rename it ) to set some values
 		neighbor.router_id        = local.get('router-id',None)
@@ -142,7 +147,7 @@ class ParseNeighbor (Section):
 		neighbor.host_name        = local.get('host-name',host())
 		neighbor.domain_name      = local.get('domain-name',domain())
 		neighbor.md5_password     = local.get('md5-password',None)
-		neighbor.md5_base64       = local.get('md5-base64', False)
+		neighbor.md5_base64       = local.get('md5-base64', None)
 		neighbor.md5_ip           = local.get('md5-ip',neighbor.local_address)
 		neighbor.description      = local.get('description','')
 		neighbor.flush            = local.get('auto-flush',True)
@@ -153,7 +158,11 @@ class ParseNeighbor (Section):
 		neighbor.group_updates    = local.get('group-updates',True)
 		neighbor.manual_eor       = local.get('manual-eor', False)
 
-		neighbor.api              = ParseAPI.extract()
+		local_api = ParseAPI.extract()
+		for k,values in self.scope.get('api',{}).items():
+			for value in values:
+				local_api.setdefault(k,[]).append(value)
+		neighbor.api              = local_api
 
 		# capabilities
 		capability = local.get('capability',{})
@@ -179,11 +188,18 @@ class ParseNeighbor (Section):
 
 		neighbor.changes = []
 
+		# old format
 		for section in ('static','l2vpn','flow'):
 			routes = local.get(section,{}).get('routes',[])
 			for route in routes:
 				route.nlri.action = OUT.ANNOUNCE
 			neighbor.changes.extend(routes)
+
+		# new format
+		routes = local.get('routes',[])
+		for route in routes:
+			route.nlri.action = OUT.ANNOUNCE
+		neighbor.changes.extend(routes)
 
 		messages = local.get('operational',{}).get('routes',[])
 

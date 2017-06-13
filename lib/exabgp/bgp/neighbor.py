@@ -205,6 +205,13 @@ class Neighbor (object):
 
 		codes = Message.CODE
 
+		_extension_global = {
+			'neighbor-changes': 'neighbor-changes',
+			'negotiated':       'negotiated',
+			'fsm':              'fsm',
+			'signal':           'signal',
+		}
+
 		_extension_receive = {
 			'receive-packets':                        'packets',
 			'receive-parsed':                         'parsed',
@@ -229,15 +236,36 @@ class Neighbor (object):
 			'send-%s' % codes.OPERATIONAL.SHORT:   'operational',
 		}
 
-		_receive = []
-		for api,name in _extension_receive.items():
-			_receive.extend(['\t\t\t%s;\n' % name,] if self.api[api] else [])
-		receive = ''.join(_receive)
+		apis = ''
 
-		_send = []
-		for api,name in _extension_send.items():
-			_send.extend(['\t\t\t%s;\n' % name,] if self.api[api] else [])
-		send = ''.join(_send)
+		for process in self.api['processes']:
+			_global = []
+			_receive = []
+			_send = []
+
+			for api,name in _extension_global.items():
+				_global.extend(['\t\t%s;\n' % name,] if process in self.api[api] else [])
+
+			for api,name in _extension_receive.items():
+				_receive.extend(['\t\t\t%s;\n' % name,] if process in self.api[api] else [])
+
+			for api,name in _extension_send.items():
+				_send.extend(['\t\t\t%s;\n' % name,] if process in self.api[api] else [])
+
+			_api  = '\tapi {\n'
+			_api += '\t\tprocesses [ %s ];\n' % process
+			_api += ''.join(_global)
+			if _receive:
+				_api += '\t\treceive {\n'
+				_api += ''.join(_receive)
+				_api += '\t\t}\n'
+			if _send:
+				_api += '\t\tsend {\n'
+				_api += ''.join(_send)
+				_api += '\t\t}\n'
+			_api += '\t}\n'
+
+			apis += _api
 
 		returned = \
 			'neighbor %s {\n' \
@@ -255,8 +283,8 @@ class Neighbor (object):
 			'%s%s%s%s%s%s%s\t}\n' \
 			'\tfamily {%s\n' \
 			'\t}\n' \
-			'\tapi {\n' \
-			'%s%s\t}%s\n' \
+			'%s' \
+			'%s' \
 			'}' % (
 				self.peer_address,
 				self.description,
@@ -275,7 +303,7 @@ class Neighbor (object):
 				'\tauto-flush %s;\n' % ('true' if self.flush else 'false'),
 				'\tadj-rib-out %s;\n' % ('true' if self.adjribout else 'false'),
 				'\tmd5-password "%s";\n' % self.md5_password if self.md5_password else '',
-				'\tmd5-base64 %s;\n' % ('true' if self.md5_base64 else 'false'),
+				'\tmd5-base64 %s;\n' % ('true' if self.md5_base64 is True else 'false' if self.md5_base64 is False else 'auto'),
 				'\tmd5-ip "%s";\n' % self.md5_ip if not self.auto_discovery else '',
 				'\toutgoing-ttl %s;\n' % self.ttl_out if self.ttl_out else '',
 				'\tincoming-ttl %s;\n' % self.ttl_in if self.ttl_in else '',
@@ -287,10 +315,11 @@ class Neighbor (object):
 				'\t\toperational %s;\n' % ('enable' if self.operational else 'disable'),
 				'\t\taigp %s;\n' % ('enable' if self.aigp else 'disable'),
 				families,
-				'\t\treceive {\n%s\t\t}\n' % receive if receive else '',
-				'\t\tsend {\n%s\t\t}\n' % send if send else '',
+				apis,
 				changes
 			)
+		# '\t\treceive {\n%s\t\t}\n' % receive if receive else '',
+		# '\t\tsend {\n%s\t\t}\n' % send if send else '',
 		return returned.replace('\t','  ')
 
 	def __str__ (self):

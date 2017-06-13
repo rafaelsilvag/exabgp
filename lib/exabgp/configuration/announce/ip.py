@@ -1,6 +1,6 @@
 # encoding: utf-8
 """
-inet/__init__.py
+announce/ipv4.py
 
 Created by Thomas Mangin on 2015-06-04.
 Copyright (c) 2009-2015 Exa Networks. All rights reserved.
@@ -12,25 +12,26 @@ from exabgp.util import character
 from exabgp.util import ordinal
 from exabgp.util import concat_bytes_i
 
+
 from exabgp.protocol.ip import IP
 from exabgp.protocol.ip import NoNextHop
+
+from exabgp.rib.change import Change
 
 from exabgp.bgp.message import OUT
 
 from exabgp.protocol.family import AFI
 from exabgp.protocol.family import SAFI
 
+from exabgp.bgp.message.update.nlri import INET
 from exabgp.bgp.message.update.nlri.cidr import CIDR
-from exabgp.bgp.message.update.nlri.qualifier import Labels
-from exabgp.bgp.message.update.nlri.qualifier import RouteDistinguisher
 from exabgp.bgp.message.update.attribute import Attribute
-
-from exabgp.rib.change import Change
+from exabgp.bgp.message.update.attribute import Attributes
 
 from exabgp.configuration.core import Section
 
-# from exabgp.configuration.static.parser import inet
-from exabgp.configuration.static.parser import mpls
+from exabgp.configuration.static.parser import prefix
+from exabgp.configuration.static.parser import inet
 from exabgp.configuration.static.parser import attribute
 from exabgp.configuration.static.parser import next_hop
 from exabgp.configuration.static.parser import origin
@@ -45,14 +46,11 @@ from exabgp.configuration.static.parser import community
 from exabgp.configuration.static.parser import large_community
 from exabgp.configuration.static.parser import extended_community
 from exabgp.configuration.static.parser import aigp
-from exabgp.configuration.static.parser import path_information
 from exabgp.configuration.static.parser import name as named
 from exabgp.configuration.static.parser import split
 from exabgp.configuration.static.parser import watchdog
 from exabgp.configuration.static.parser import withdraw
-from exabgp.configuration.static.mpls import route_distinguisher
 from exabgp.configuration.static.mpls import label
-from exabgp.configuration.static.mpls import prefix_sid
 
 
 # Take an integer an created it networked packed representation for the right family (ipv4/ipv6)
@@ -60,12 +58,10 @@ def pack_int (afi, integer):
 	return concat_bytes_i(character((integer >> (offset * 8)) & 0xff) for offset in range(IP.length(afi)-1,-1,-1))
 
 
-class ParseStaticRoute (Section):
+class ParseIP (Section):
 	# put next-hop first as it is a requirement atm
 	definition = [
 		'next-hop <ip>',
-		'path-information <ipv4 formated number>',
-		'route-distinguisher|rd <ipv4>:<port>|<16bits number>:<32bits number>|<32bits number>:<16bits number>',
 		'origin IGP|EGP|INCOMPLETE',
 		'as-path [ <asn>.. ]',
 		'med <16 bits number>',
@@ -88,15 +84,11 @@ class ParseStaticRoute (Section):
 	]
 
 	syntax = \
-		'route <ip>/<netmask> { ' \
+		'<safi> <ip>/<netmask> { ' \
 		'\n   ' + ' ;\n   '.join(definition) + '\n}'
 
 	known = {
-		'path-information':    path_information,
-		'rd':                  route_distinguisher,
-		'route-distinguisher': route_distinguisher,
 		'label':               label,
-		'bgp-prefix-sid':      prefix_sid,
 		'attribute':           attribute,
 		'next-hop':            next_hop,
 		'origin':              origin,
@@ -118,11 +110,6 @@ class ParseStaticRoute (Section):
 	}
 
 	action = {
-		'path-information':    'nlri-set',
-		'rd':                  'nlri-set',
-		'route-distinguisher': 'nlri-set',
-		'label':               'nlri-set',
-		'bgp-prefix-sid':      'attribute-add',
 		'attribute':           'attribute-add',
 		'next-hop':            'nexthop-and-attribute',
 		'origin':              'attribute-add',
@@ -144,13 +131,10 @@ class ParseStaticRoute (Section):
 	}
 
 	assign = {
-		'path-information':    'path_info',
-		'rd':                  'rd',
-		'route-distinguisher': 'rd',
-		'label':               'labels',
 	}
 
-	name = 'static/route'
+	name = 'ip'
+	afi = None
 
 	def __init__ (self, tokeniser, scope, error, logger):
 		Section.__init__(self,tokeniser,scope,error,logger)
@@ -159,42 +143,26 @@ class ParseStaticRoute (Section):
 		return True
 
 	def pre (self):
-		self.scope.set(self.name,mpls(self.tokeniser.iterate))
 		# self.scope.set(self.name,inet(self.tokeniser.iterate))
 		return True
 
 	def post (self):
-		# self._family()
 		self._split()
-		# self.scope.to_context()
 		routes = self.scope.pop(self.name)
 		if routes:
-			for route in routes:
-				# if route.nlri.has_rd():
-				if route.nlri.rd is not RouteDistinguisher.NORD:
-					route.nlri.safi = SAFI.mpls_vpn
-				# elif route.nlri.has_label():
-				elif route.nlri.labels is not Labels.NOLABEL:
-					route.nlri.safi = SAFI.nlri_mpls
-
 			self.scope.extend('routes',routes)
 		return True
 
-	# def _family (self):
-	# 	last = self.scope.get(self.name)
-	# 	if last.nlri.labels and not last.nlri.safi.has_label():
-	# 		last.nlri.safi = SAFI.nlri_mpls
-
 	def _check (self):
-		if not self.check(self.scope.get(self.name)):
+		if not self.check(self.scope.get(self.name),self.afi):
 			return self.error.set(self.syntax)
 		return True
 
 	@staticmethod
-	def check (change):
+	def check (change,afi):
 		if change.nlri.nexthop is NoNextHop \
 			and change.nlri.action == OUT.ANNOUNCE \
-			and change.nlri.afi == AFI.ipv4 \
+			and change.nlri.afi == afi \
 			and change.nlri.safi in (SAFI.unicast,SAFI.multicast):
 			return False
 		return True
@@ -230,10 +198,6 @@ class ParseStaticRoute (Section):
 		klass = last.nlri.__class__
 		path_info = last.nlri.path_info
 		nexthop = last.nlri.nexthop
-		if klass.has_label():
-			labels = last.nlri.labels
-		if klass.has_rd():
-			rd = last.nlri.rd
 
 		# XXX: Looks weird to set and then set to None, check
 		last.nlri.cidr.mask = cut
@@ -246,15 +210,74 @@ class ParseStaticRoute (Section):
 			nlri.cidr = CIDR(pack_int(afi,ip),cut)
 			nlri.nexthop = nexthop  # nexthop can be NextHopSelf
 			nlri.path_info = path_info
-			# Really ugly
-			if klass.has_label():
-				nlri.labels = labels
-			if klass.has_rd():
-				nlri.rd = rd
 			# next ip
 			ip += increment
 			yield Change(nlri,last.attributes)
 
 	def _split (self):
-		for splat in self.split(self.scope.pop(self.name)):
-			self.scope.append(self.name,splat)
+		for route in self.scope.pop(self.name,[]):
+			for splat in self.split(route):
+				self.scope.append(self.name,splat)
+
+
+def ip (tokeniser,afi,safi):
+	ipmask = prefix(tokeniser)
+
+	nlri = INET(afi,safi,OUT.ANNOUNCE)
+	nlri.cidr = CIDR(ipmask.pack(),ipmask.mask)
+
+	change = Change(
+		nlri,
+		Attributes()
+	)
+
+	while True:
+		command = tokeniser()
+
+		if not command:
+			break
+
+		action = ParseIP.action.get(command,'')
+
+		if action == 'attribute-add':
+			change.attributes.add(ParseIP.known[command](tokeniser))
+		elif action == 'nlri-set':
+			change.nlri.assign(ParseIP.assign[command],ParseIP.known[command](tokeniser))
+		elif action == 'nexthop-and-attribute':
+			nexthop,attribute = ParseIP.known[command](tokeniser)
+			change.nlri.nexthop = nexthop
+			change.attributes.add(attribute)
+		else:
+			raise ValueError('route: unknown command "%s"' % command)
+
+	return [change]
+
+
+class ParseIPv4 (ParseIP):
+	name = 'ipv4'
+	afi = AFI.ipv4
+
+
+@ParseIPv4.register('unicast','extend-name',True)
+def unicast_v4 (tokeniser):
+	return ip(tokeniser,AFI.ipv4,SAFI.unicast)
+
+
+@ParseIPv4.register('multicast','extend-name',True)
+def multicast_v4 (tokeniser):
+	return ip(tokeniser,AFI.ipv4,SAFI.multicast)
+
+
+class ParseIPv6 (ParseIP):
+	name = 'ipv6'
+	afi = AFI.ipv6
+
+
+@ParseIPv6.register('unicast','extend-name',True)
+def unicast_v6 (tokeniser):
+	return ip(tokeniser,AFI.ipv6,SAFI.unicast)
+
+
+@ParseIPv6.register('multicast','extend-name',True)
+def multicast_v6 (tokeniser):
+	return ip(tokeniser,AFI.ipv6,SAFI.multicast)

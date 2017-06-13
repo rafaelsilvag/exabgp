@@ -46,8 +46,8 @@ class IP (object):
 	afi = None  # here for the API, changed in init which does not change this
 	_known = dict()
 
-	_UNICAST = SAFI(SAFI.unicast)
-	_MULTICAST = SAFI(SAFI.multicast)
+	_UNICAST = SAFI.unicast
+	_MULTICAST = SAFI.multicast
 
 	_multicast_range = set(range(224,240))  # 239
 
@@ -200,7 +200,11 @@ class IPRange (IP):
 		return klass(ip,mask)
 
 	def __repr__ (self):
-		return '%s/%d' % (self.top(),self.mask)
+		if (self.ipv4() and self.mask == 32) or \
+		   (self.ipv6() and self.mask == 128):
+			return super(IPRange, self).__repr__()
+		else:
+			return '%s/%d' % (self.top(), int(self.mask))
 
 
 # ==================================================================== NoNextHop
@@ -230,7 +234,7 @@ NoNextHop = _NoNextHop()
 
 class IPv4 (IP):
 	# lower case to match the class Address API
-	afi = AFI(AFI.ipv4)
+	afi = AFI.ipv4
 
 	__slots__ = []
 
@@ -277,7 +281,7 @@ IPv4.register()
 
 class IPv6 (IP):
 	# lower case to match the class Address API
-	afi = AFI(AFI.ipv6)
+	afi = AFI.ipv6
 
 	__slots__ = []
 
