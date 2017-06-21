@@ -3,7 +3,8 @@
 command.py
 
 Created by Thomas Mangin on 2015-12-15.
-Copyright (c) 2009-2015 Exa Networks. All rights reserved.
+Copyright (c) 2009-2017 Exa Networks. All rights reserved.
+License: 3-clause BSD. (See the COPYRIGHT file)
 """
 
 from exabgp.protocol.family import AFI
@@ -46,7 +47,7 @@ def _show_routes_callback(reactor, service, last, route_type, advertised, extens
 				continue
 			if advertised:
 				families = peer.proto.negotiated.families if peer.proto else []
-			routes = list(peer.neighbor.rib.outgoing.sent_changes(families))
+			routes = list(peer.neighbor.rib.outgoing.cached_changes(families))
 			while routes:
 				changes, routes = routes[:lines_per_yield], routes[lines_per_yield:]
 				for change in changes:

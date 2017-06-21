@@ -24,8 +24,13 @@ Version 4.0.1
  * Feature: local-as can be set to "auto", to auto-setup an iBGP session using the OPEN's ASN
  * Feature: Allow binding to multiple global IP addresses
  * Feature: Add --validate option to check configuration
+ * Feature: Added option to save ADJ-RIB-IN
  * Fix: Handle MD5 authentication on global IP addresses
  * Fix: profiling code
+ * Fix: issue when waiting on a TCP connection then closed
+ * Fix: parsing flowspec port
+ * Fix: correctly inherit API data when using templated neighbors
+ * Fix: hexstring function
 
 Version 4.0.0
  * Feature: add support for interface-set for BGP flowspec routes

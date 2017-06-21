@@ -3,7 +3,8 @@
 icmp.py
 
 Created by Thomas Mangin on 2010-01-15.
-Copyright (c) 2009-2015 Exa Networks. All rights reserved.
+Copyright (c) 2009-2017 Exa Networks. All rights reserved.
+License: 3-clause BSD. (See the COPYRIGHT file)
 """
 
 from exabgp.protocol.resource import Resource
@@ -16,6 +17,9 @@ class Port (Resource):
 	NAME = 'port'
 
 	def __str__ (self):
+		return str(int(self))
+
+	def name (self):
 		return self.names.get(self,'%d' % int(self))
 
 	names = {

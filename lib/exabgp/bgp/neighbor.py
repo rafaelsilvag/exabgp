@@ -3,7 +3,8 @@
 neighbor.py
 
 Created by Thomas Mangin on 2009-11-05.
-Copyright (c) 2009-2015 Exa Networks. All rights reserved.
+Copyright (c) 2009-2017 Exa Networks. All rights reserved.
+License: 3-clause BSD. (See the COPYRIGHT file)
 """
 
 import os
@@ -50,7 +51,8 @@ class Neighbor (object):
 		self.ttl_out = None
 		self.group_updates = None
 		self.flush = None
-		self.adjribout = None
+		self.adj_rib_in = None
+		self.adj_rib_out = None
 
 		self.manual_eor = False
 
@@ -95,7 +97,7 @@ class Neighbor (object):
 		self.uid = '%d-%s' % (os.getpid(),uuid.uuid1())
 
 	def make_rib (self):
-		self.rib = RIB(self.name(),self.adjribout,self._families)
+		self.rib = RIB(self.name(),self.adj_rib_in,self.adj_rib_out,self._families)
 
 	# will resend all the routes once we reconnect
 	def reset_rib (self):
@@ -185,7 +187,8 @@ class Neighbor (object):
 			self.operational == other.operational and \
 			self.group_updates == other.group_updates and \
 			self.flush == other.flush and \
-			self.adjribout == other.adjribout and \
+			self.adj_rib_in == other.adj_rib_in and \
+			self.adj_rib_out == other.adj_rib_out and \
 			self.families() == other.families()
 
 	def __ne__ (self, other):
@@ -280,7 +283,7 @@ class Neighbor (object):
 			'\tmanual-eor %s;\n' \
 			'%s%s%s%s%s%s%s%s%s%s%s\n' \
 			'\tcapability {\n' \
-			'%s%s%s%s%s%s%s\t}\n' \
+			'%s%s%s%s%s%s%s%s\t}\n' \
 			'\tfamily {%s\n' \
 			'\t}\n' \
 			'%s' \
@@ -301,7 +304,8 @@ class Neighbor (object):
 				'\n\tconnect %d;\n' % self.connect if self.connect else '',
 				'\tgroup-updates %s;\n' % ('true' if self.group_updates else 'false'),
 				'\tauto-flush %s;\n' % ('true' if self.flush else 'false'),
-				'\tadj-rib-out %s;\n' % ('true' if self.adjribout else 'false'),
+				'\tadj-rib-in %s;\n' % ('true' if self.adj_rib_in else 'false'),
+				'\tadj-rib-out %s;\n' % ('true' if self.adj_rib_out else 'false'),
 				'\tmd5-password "%s";\n' % self.md5_password if self.md5_password else '',
 				'\tmd5-base64 %s;\n' % ('true' if self.md5_base64 is True else 'false' if self.md5_base64 is False else 'auto'),
 				'\tmd5-ip "%s";\n' % self.md5_ip if not self.auto_discovery else '',
@@ -318,6 +322,7 @@ class Neighbor (object):
 				apis,
 				changes
 			)
+
 		# '\t\treceive {\n%s\t\t}\n' % receive if receive else '',
 		# '\t\tsend {\n%s\t\t}\n' % send if send else '',
 		return returned.replace('\t','  ')

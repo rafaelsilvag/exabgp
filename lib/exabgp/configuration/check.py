@@ -3,7 +3,8 @@
 check.py
 
 Created by Thomas Mangin on 2009-08-25.
-Copyright (c) 2009-2015 Exa Networks. All rights reserved.
+Copyright (c) 2009-2017 Exa Networks. All rights reserved.
+License: 3-clause BSD. (See the COPYRIGHT file)
 """
 
 # common
@@ -86,7 +87,7 @@ def check_neighbor (neighbors):
 		for _ in neighbor.rib.outgoing.updates(False):
 			pass
 
-		for change1 in neighbor.rib.outgoing.sent_changes():
+		for change1 in neighbor.rib.outgoing.cached_changes():
 			str1 = change1.extensive()
 			packed = list(Update([change1.nlri],change1.attributes).messages(negotiated))
 			pack1 = packed[0]

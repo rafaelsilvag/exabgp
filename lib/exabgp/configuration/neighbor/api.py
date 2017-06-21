@@ -3,7 +3,8 @@
 parse_process.py
 
 Created by Thomas Mangin on 2015-06-05.
-Copyright (c) 2009-2015 Exa Networks. All rights reserved.
+Copyright (c) 2009-2017 Exa Networks. All rights reserved.
+License: 3-clause BSD. (See the COPYRIGHT file)
 """
 
 import time
@@ -149,12 +150,13 @@ class ParseAPI (Section):
 		named = self.tokeniser.iterate()
 		self.named = named if named else 'auto-named-%d' % int(time.time()*1000000)
 		self.check_name(self.named)
+		self.scope.enter(self.named)
 		self.scope.to_context()
 		return True
 
 	def post (self):
-		self.scope.to_context(self.name)
-		api = self.scope.pop()
+		self.scope.to_context()
+		api = self.scope.pop(self.named)
 		procs = api.get('processes',[])
 
 		type(self)._built['processes'].extend(procs)
@@ -167,6 +169,10 @@ class ParseAPI (Section):
 			for action in ('parsed','packets','consolidate','open', 'update', 'notification', 'keepalive', 'refresh', 'operational'):
 				type(self)._built["%s-%s" % (direction,action)].extend(procs if data.get(action,False) else [])
 
+		if self.scope.location().startswith('template/'):
+			for k,v in self.extract().items():
+				self.scope.set(k,self.scope.get(k,[])+v)
+		self.scope.leave()
 		return True
 
 

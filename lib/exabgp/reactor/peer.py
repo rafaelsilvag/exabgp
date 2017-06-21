@@ -3,7 +3,8 @@
 peer.py
 
 Created by Thomas Mangin on 2009-08-25.
-Copyright (c) 2009-2015 Exa Networks. All rights reserved.
+Copyright (c) 2009-2017 Exa Networks. All rights reserved.
+License: 3-clause BSD. (See the COPYRIGHT file)
 """
 
 # import traceback
@@ -378,12 +379,11 @@ class Peer (object):
 				# Received update
 				if message.TYPE == Update.TYPE:
 					number += 1
-
-					self.logger.routes(LazyFormat('<< UPDATE (%d)' % number,message.attributes,lambda _: "%s%s" % (' attributes' if _ else '',_)),source=self.proto.connection.session())
+					self.logger.routes('%s << UPDATE #%d' % (self.proto.connection.session(),number))
 
 					for nlri in message.nlris:
-						self.neighbor.rib.incoming.insert_received(Change(nlri,message.attributes))
-						self.logger.routes(LazyFormat('<< UPDATE (%d) nlri ' % number,nlri,str),source=self.proto.connection.session())
+						self.neighbor.rib.incoming.update_cache(Change(nlri,message.attributes))
+						self.logger.routes(LazyFormat('<< UPDATE #%d nlri ' % number,nlri,str),source=self.proto.connection.session())
 
 				elif message.TYPE == RouteRefresh.TYPE:
 					if message.reserved == RouteRefresh.request:

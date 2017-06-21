@@ -3,7 +3,8 @@
 nlri.py
 
 Created by Thomas Mangin on 2012-07-08.
-Copyright (c) 2009-2015 Exa Networks. All rights reserved.
+Copyright (c) 2009-2017 Exa Networks. All rights reserved.
+License: 3-clause BSD. (See the COPYRIGHT file)
 """
 
 from exabgp.protocol.family import AFI
@@ -33,7 +34,7 @@ class NLRI (Family):
 		setattr(self,name,value)
 
 	def _index (self):
-		return '%s%s' % (self.afi,self.safi)
+		return '%02x%02x' % (self.afi,self.safi)
 
 	def index (self):
 		return self._index() + str(self.pack())

@@ -3,7 +3,8 @@
 neighbor/__init__.py
 
 Created by Thomas Mangin on 2015-06-04.
-Copyright (c) 2009-2015 Exa Networks. All rights reserved.
+Copyright (c) 2009-2017 Exa Networks. All rights reserved.
+License: 3-clause BSD. (See the COPYRIGHT file)
 """
 
 # import sys
@@ -72,6 +73,7 @@ class ParseNeighbor (Section):
 		'group-updates': boolean,
 		'auto-flush':    boolean,
 		'adj-rib-out':   boolean,
+		'adj-rib-in':    boolean,
 		'manual-eor':    boolean,
 	}
 
@@ -97,6 +99,7 @@ class ParseNeighbor (Section):
 		'group-updates': 'set-command',
 		'auto-flush':    'set-command',
 		'adj-rib-out':   'set-command',
+		'adj-rib-in':    'set-command',
 		'manual-eor':    'set-command',
 		'route':         'append-name',
 	}
@@ -107,6 +110,7 @@ class ParseNeighbor (Section):
 		'group-updates': True,
 		'auto-flush': True,
 		'adj-rib-out': False,
+		'adj-rib-in': False,
 		'manual-eor': False,
 	}
 
@@ -126,6 +130,7 @@ class ParseNeighbor (Section):
 		return self.parse(self.name,'peer-address')
 
 	def post (self):
+		self.scope.to_context()
 		local = self.scope.pop_context(self.name)
 		neighbor = Neighbor()
 
@@ -151,7 +156,8 @@ class ParseNeighbor (Section):
 		neighbor.md5_ip           = local.get('md5-ip',neighbor.local_address)
 		neighbor.description      = local.get('description','')
 		neighbor.flush            = local.get('auto-flush',True)
-		neighbor.adjribout        = local.get('adj-rib-out',True)
+		neighbor.adj_rib_out      = local.get('adj-rib-out',True)
+		neighbor.adj_rib_in       = local.get('adj-rib-in',True)
 		neighbor.aigp             = local.get('aigp',None)
 		neighbor.ttl_out          = local.get('outgoing-ttl',None)
 		neighbor.ttl_in           = local.get('incoming-ttl',None)
@@ -180,6 +186,10 @@ class ParseNeighbor (Section):
 		for family in ParseFamily.convert.keys():
 			for pair in local.get('family',{}).get(family,[]):
 				families.append(pair)
+
+		for k,values in self.scope.get('family',{}).items():
+			for value in values:
+				families.append(value)
 
 		families = families or NLRI.known_families()
 
@@ -212,7 +222,7 @@ class ParseNeighbor (Section):
 			neighbor.router_id = neighbor.local_address
 
 		if neighbor.route_refresh:
-			if neighbor.adjribout:
+			if neighbor.adj_rib_out:
 				self.logger.configuration('route-refresh requested, enabling adj-rib-out')
 
 		missing = neighbor.missing()
@@ -250,7 +260,7 @@ class ParseNeighbor (Section):
 			for change in neighbor.changes:
 				if change.nlri.family() in families:
 					# This add the family to neighbor.families()
-					neighbor.rib.outgoing.insert_announced_watchdog(change)
+					neighbor.rib.outgoing.add_to_rib_watchdog(change)
 			for message in messages:
 				if message.family() in families:
 					if message.name == 'ASM':

@@ -3,7 +3,8 @@
 inet.py
 
 Created by Thomas Mangin on 2014-06-27.
-Copyright (c) 2009-2015 Exa Networks. All rights reserved.
+Copyright (c) 2009-2017 Exa Networks. All rights reserved.
+License: 3-clause BSD. (See the COPYRIGHT file)
 """
 
 from struct import unpack
@@ -63,7 +64,7 @@ class INET (NLRI):
 
 	def index (self):
 		addpath = 'no-pi' if self.path_info is PathInfo.NOPATH else str(self.path_info.pack())
-		return NLRI._index(self) + addpath + str(self.cidr.pack_nlri())
+		return NLRI._index(self) + addpath + str(self.cidr.index())
 
 	def extensive (self):
 		return "%s%s" % (self.prefix(),'' if self.nexthop is NoNextHop else ' next-hop %s' % self.nexthop)

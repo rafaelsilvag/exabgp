@@ -3,7 +3,8 @@
 reactor/loop.py
 
 Created by Thomas Mangin on 2012-06-10.
-Copyright (c) 2009-2015 Exa Networks. All rights reserved.
+Copyright (c) 2009-2017 Exa Networks. All rights reserved.
+License: 3-clause BSD. (See the COPYRIGHT file)
 """
 
 import os
@@ -142,6 +143,9 @@ class Reactor (object):
 		except socket.error as exc:
 			if exc.errno in error.fatal:
 				raise exc
+			return []
+		except ValueError as exc:
+			# The peer closing the TCP connection lead to a negative file descritor
 			return []
 		except KeyboardInterrupt:
 			self._termination('^C received')
@@ -542,7 +546,7 @@ class Reactor (object):
 	@staticmethod
 	def match_neighbor (description, name):
 		for string in description:
-			if re.search(r'(^|[\s])%s($|[\s,])' % re.escape(string), name) is None:
+			if re.search(r'(^|\s)%s($|\s|,)' % re.escape(string), name) is None:
 				return False
 		return True
 
