@@ -25,14 +25,14 @@ from exabgp.configuration.flow.parser import next_hop
 class ParseFlowRoute (Section):
 	syntax = \
 		'route give-me-a-name {\n' \
-		'  (optional) route-distinguisher|rd 255.255.255.255:65535|65535:65536|65536:65535;\n' \
+		'  (optional) rd 255.255.255.255:65535|65535:65536|65536:65535;\n' \
 		'  next-hop 1.2.3.4; (to use with redirect-to-nexthop)\n' \
 		'  %s\n' \
 		'  %s\n' \
 		'  %s\n' \
 		'}\n' % (
 			'\n  '.join(ParseFlowMatch.syntax.split('\n')),
-			'\n  '.join(ParseFlowScope.syntax.split('\n')),			
+			'\n  '.join(ParseFlowScope.syntax.split('\n')),
 			'\n  '.join(ParseFlowThen.syntax.split('\n'))
 		)
 
@@ -78,5 +78,5 @@ class ParseFlowRoute (Section):
 		return True
 
 	def _check (self,change):
-		self.logger.configuration('warning: no check on flows are implemented')
+		self.logger.debug('warning: no check on flows are implemented','configuration')
 		return True

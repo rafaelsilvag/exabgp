@@ -25,11 +25,12 @@ from exabgp.configuration.neighbor import ParseNeighbor
 from exabgp.configuration.neighbor.api import ParseAPI
 from exabgp.configuration.neighbor.api import ParseSend
 from exabgp.configuration.neighbor.api import ParseReceive
-from exabgp.configuration.family import ParseFamily
+from exabgp.configuration.neighbor.family import ParseFamily
+from exabgp.configuration.neighbor.family import ParseAddPath
 from exabgp.configuration.capability import ParseCapability
-from exabgp.configuration.announce import ParseAnnounce
-from exabgp.configuration.announce.ip import ParseIPv4
-from exabgp.configuration.announce.ip import ParseIPv6
+from exabgp.configuration.announce import SectionAnnounce
+from exabgp.configuration.announce import ParseIPv4
+from exabgp.configuration.announce import ParseIPv6
 from exabgp.configuration.static import ParseStatic
 from exabgp.configuration.static import ParseStaticRoute
 from exabgp.configuration.flow import ParseFlow
@@ -42,6 +43,13 @@ from exabgp.configuration.l2vpn import ParseVPLS
 from exabgp.configuration.operational import ParseOperational
 
 from exabgp.configuration.environment import environment
+
+# for registration
+from exabgp.configuration.announce.ip import ParseIP
+from exabgp.configuration.announce.path import ParsePath
+from exabgp.configuration.announce.label import ParseLabel
+from exabgp.configuration.announce.vpn import ParseVPN
+from exabgp.configuration.announce.flow import ParseFlow
 
 
 if sys.version_info[0] >= 3:
@@ -61,7 +69,7 @@ class _Configuration (object):
 				if change.nlri.family() in self.neighbors[neighbor].families():
 					self.neighbors[neighbor].rib.outgoing.add_to_rib(change)
 				else:
-					self.logger.configuration('the route family is not configured on neighbor','error')
+					self.logger.error('the route family is not configured on neighbor','configuration')
 					result = False
 		return result
 
@@ -82,7 +90,7 @@ class _Configuration (object):
 						self.neighbors[neighbor].asm[operational.family()] = operational
 					self.neighbors[neighbor].messages.append(operational)
 				else:
-					self.logger.configuration('the route family is not configured on neighbor','error')
+					self.logger.error('the route family is not configured on neighbor','configuration')
 					result = False
 		return result
 
@@ -99,7 +107,6 @@ class _Configuration (object):
 
 
 class Configuration (_Configuration):
-
 	def __init__ (self, configurations, text=False):
 		_Configuration.__init__(self)
 		self.api_encoder = environment.settings().api.encoder
@@ -119,13 +126,14 @@ class Configuration (_Configuration):
 		self.template_neighbor   = ParseTemplateNeighbor (*params)
 		self.neighbor            = ParseNeighbor         (*params)
 		self.family              = ParseFamily           (*params)
+		self.addpath             = ParseAddPath          (*params)
 		self.capability          = ParseCapability       (*params)
 		self.api                 = ParseAPI              (*params)
 		self.api_send            = ParseSend             (*params)
 		self.api_receive         = ParseReceive          (*params)
 		self.static              = ParseStatic           (*params)
 		self.static_route        = ParseStaticRoute      (*params)
-		self.announce            = ParseAnnounce         (*params)
+		self.announce            = SectionAnnounce       (*params)
 		self.announce_ipv4       = ParseIPv4             (*params)
 		self.announce_ipv6       = ParseIPv6             (*params)
 		self.flow                = ParseFlow             (*params)
@@ -167,26 +175,28 @@ class Configuration (_Configuration):
 				'sections': {
 					'family':      self.family.name,
 					'capability':  self.capability.name,
+					'add-path':    self.addpath.name,
 					'api':         self.api.name,
-					'announce':    self.announce.name,
 					'static':      self.static.name,
 					'flow':        self.flow.name,
 					'l2vpn':       self.l2vpn.name,
 					'operational': self.operational.name,
+					'announce':    self.announce.name,
 				},
 			},
 			self.neighbor.name: {
 				'class':    self.neighbor,
 				'commands': self.neighbor.known.keys(),
 				'sections': {
-					'announce':    self.announce.name,
 					'family':      self.family.name,
 					'capability':  self.capability.name,
+					'add-path':    self.addpath.name,
 					'api':         self.api.name,
 					'static':      self.static.name,
 					'flow':        self.flow.name,
 					'l2vpn':       self.l2vpn.name,
 					'operational': self.operational.name,
+					'announce':    self.announce.name,
 				},
 			},
 			self.family.name: {
@@ -198,6 +208,12 @@ class Configuration (_Configuration):
 			self.capability.name: {
 				'class':    self.capability,
 				'commands': self.capability.known.keys(),
+				'sections': {
+				},
+			},
+			self.addpath.name: {
+				'class':    self.addpath,
+				'commands': self.addpath.known.keys(),
 				'sections': {
 				},
 			},
@@ -231,13 +247,13 @@ class Configuration (_Configuration):
 			},
 			self.announce_ipv4.name: {
 				'class':    self.announce_ipv4,
-				'commands': ['unicast', 'multicast'],
+				'commands': ['unicast', 'multicast', 'nlri-mpls', 'mpls-vpn', 'flow', 'flow-vpn'],
 				'sections': {
 				},
 			},
 			self.announce_ipv6.name: {
 				'class':    self.announce_ipv6,
-				'commands': ['unicast', 'multicast'],
+				'commands': ['unicast', 'multicast', 'nlri-mpls', 'mpls-vpn', 'flow', 'flow-vpn'],
 				'sections': {
 				},
 			},
@@ -418,6 +434,7 @@ class Configuration (_Configuration):
 				)
 			)
 
+		self.process.add_api()
 		self._commit_reload()
 		self._link()
 		self.debug_check_route()
@@ -449,7 +466,7 @@ class Configuration (_Configuration):
 
 		if self.section(section) is not True:
 			self._rollback_reload()
-			self.logger.configuration(
+			self.logger.debug(
 				"\n"
 				"syntax error in api command %s\n"
 				"line %d: %s\n"
@@ -458,14 +475,15 @@ class Configuration (_Configuration):
 					self.tokeniser.number,
 					' '.join(self.tokeniser.line),
 					str(self.error)
-				)
+				),
+				'configuration'
 			)
 			return False
 		return True
 
 	def _enter (self,name):
 		location = self.tokeniser.iterate()
-		self.logger.configuration("> %-16s | %s" % (location,self.tokeniser.params()))
+		self.logger.debug("> %-16s | %s" % (location,self.tokeniser.params()),'configuration')
 
 		if location not in self._structure[name]['sections']:
 			return self.error.set('section %s is invalid in %s, %s' % (location,name,self.scope.location()))
@@ -477,7 +495,7 @@ class Configuration (_Configuration):
 
 	def _leave (self):
 		left = self.scope.leave()
-		self.logger.configuration("< %-16s | %s" % (left,self.tokeniser.params()))
+		self.logger.debug("< %-16s | %s" % (left,self.tokeniser.params()),'configuration')
 
 		if not left:
 			return self.error.set('closing too many parenthesis')
@@ -485,7 +503,7 @@ class Configuration (_Configuration):
 
 	def _run (self,name):
 		command = self.tokeniser.iterate()
-		self.logger.configuration(". %-16s | %s" % (command,self.tokeniser.params()))
+		self.logger.debug(". %-16s | %s" % (command,self.tokeniser.params()),'configuration')
 
 		if not self.run(name,command):
 			return False

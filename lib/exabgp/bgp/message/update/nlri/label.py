@@ -23,7 +23,7 @@ from exabgp.bgp.message.update.nlri.qualifier import Labels
 
 @NLRI.register(AFI.ipv4,SAFI.nlri_mpls)
 @NLRI.register(AFI.ipv6,SAFI.nlri_mpls)
-class Labelled (INET):
+class Label (INET):
 	__slots__ = ['labels']
 
 	def __init__ (self, afi, safi, action):
@@ -40,8 +40,8 @@ class Labelled (INET):
 
 	def __eq__ (self, other):
 		return \
-			INET.__eq__(self, other) and \
-			self.labels == other.labels
+			self.labels == other.labels and \
+			INET.__eq__(self, other)
 
 	def __hash__ (self):
 		return hash(self.pack())

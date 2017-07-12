@@ -26,7 +26,8 @@ from exabgp.bgp.message.update.nlri.flow import NLRI
 
 from exabgp.configuration.core import Section
 from exabgp.configuration.neighbor.api import ParseAPI
-from exabgp.configuration.family import ParseFamily
+from exabgp.configuration.neighbor.family import ParseFamily
+from exabgp.configuration.neighbor.family import ParseAddPath
 
 from exabgp.configuration.parser import boolean
 from exabgp.configuration.parser import auto_boolean
@@ -78,7 +79,7 @@ class ParseNeighbor (Section):
 	}
 
 	action = {
-		'inherit':       'set-command',
+		'inherit':       'extend-command',
 		'description':   'set-command',
 		'host-name':     'set-command',
 		'domain-name':   'set-command',
@@ -130,13 +131,19 @@ class ParseNeighbor (Section):
 		return self.parse(self.name,'peer-address')
 
 	def post (self):
-		self.scope.to_context()
-		local = self.scope.pop_context(self.name)
-		neighbor = Neighbor()
+		self.scope.to_context(self.name)
 
-		for inherit in local.get('inherit',[]):
+		for inherit in self.scope.pop('inherit',[]):
 			data = self.scope.template('neighbor',inherit)
 			self.scope.inherit(data)
+
+		neighbor = Neighbor()
+		local = self.scope.get()
+		local_api = ParseAPI.empty()
+
+		for k,values in local.pop('api',{}).items():
+			for value in values:
+				local_api.setdefault(k,[]).append(value)
 
 		# XXX: use the right class for the data type
 		# XXX: we can use the scope.nlri interface ( and rename it ) to set some values
@@ -164,15 +171,7 @@ class ParseNeighbor (Section):
 		neighbor.group_updates    = local.get('group-updates',True)
 		neighbor.manual_eor       = local.get('manual-eor', False)
 
-		local_api = ParseAPI.extract()
-		for k,values in self.scope.get('api',{}).items():
-			for value in values:
-				local_api.setdefault(k,[]).append(value)
-		neighbor.api              = local_api
-
-		# capabilities
 		capability = local.get('capability',{})
-
 		neighbor.add_path         = capability.get('add-path',0)
 		neighbor.asn4             = capability.get('asn4',True)
 		neighbor.multisession     = capability.get('multi-session',False)
@@ -182,19 +181,30 @@ class ParseNeighbor (Section):
 		if capability.get('graceful-restart',False) is not False:
 			neighbor.graceful_restart = capability.get('graceful-restart',0) or int(neighbor.hold_time)
 
+		neighbor.api              = local_api
+
 		families = []
-		for family in ParseFamily.convert.keys():
+		for family in ParseFamily.convert:
 			for pair in local.get('family',{}).get(family,[]):
 				families.append(pair)
-
-		for k,values in self.scope.get('family',{}).items():
-			for value in values:
-				families.append(value)
 
 		families = families or NLRI.known_families()
 
 		for family in families:
 			neighbor.add_family(family)
+
+		if neighbor.add_path:
+			add_path = local.get('add-path',{})
+			if add_path:
+				for family in ParseAddPath.convert:
+					for pair in add_path.get(family,[]):
+						if pair not in families:
+							self.logger.debug('skipping add-path family %s as it is not negotiated' % pair,'configuration')
+							continue
+						neighbor.add_addpath(pair)
+			else:
+				for family in families:
+					neighbor.add_addpath(family)
 
 		neighbor.changes = []
 
@@ -223,7 +233,7 @@ class ParseNeighbor (Section):
 
 		if neighbor.route_refresh:
 			if neighbor.adj_rib_out:
-				self.logger.configuration('route-refresh requested, enabling adj-rib-out')
+				self.logger.debug('route-refresh requested, enabling adj-rib-out','configuration')
 
 		missing = neighbor.missing()
 		if missing:
@@ -282,8 +292,3 @@ class ParseNeighbor (Section):
 			_init_neighbor(neighbor)
 
 		return True
-
-		# display configuration
-		# for line in str(neighbor).split('\n'):
-		# 	self.logger.configuration(line)
-		# self.logger.configuration("\n")

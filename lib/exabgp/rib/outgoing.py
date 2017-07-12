@@ -8,6 +8,9 @@ License: 3-clause BSD. (See the COPYRIGHT file)
 """
 import sys
 
+from exabgp.protocol.family import AFI
+from exabgp.protocol.family import SAFI
+
 from exabgp.bgp.message import OUT
 from exabgp.bgp.message import Update
 from exabgp.bgp.message.refresh import RouteRefresh
@@ -64,6 +67,9 @@ class OutgoingRIB (Cache):
 		self._new_attr_af_nlri = {}
 		self._new_attribute = {}
 		self.reset()
+
+	def pending (self):
+		return len(self._new_nlri) != 0
 
 	def resend (self, families, enhanced_refresh):
 		# families can be None or []
@@ -185,7 +191,7 @@ class OutgoingRIB (Cache):
 
 				attributes = new_attr[attr_index]
 
-				if grouped:
+				if family == (AFI.ipv4,SAFI.unicast) and grouped:
 					yield Update([change.nlri for change in changes.values()], attributes)
 				else:
 					for change in changes.values():

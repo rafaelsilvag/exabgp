@@ -163,7 +163,7 @@ def MD5 (io, ip, port, md5, md5_base64):
 			if md5:
 				key = pack('2xH4x%ds' % TCP_MD5SIG_MAXKEYLEN, len(md5), md5)
 			else:
-				key = pack('2xH4x%ds' % TCP_MD5SIG_MAXKEYLEN, 0, '')
+				key = pack('2xH4x%ds' % TCP_MD5SIG_MAXKEYLEN, 0, b'')
 
 			TCP_MD5SIG = 14
 			io.setsockopt(socket.IPPROTO_TCP, TCP_MD5SIG, sockaddr + key)
@@ -232,18 +232,18 @@ def ready (io):
 			_,w,_ = select.select([],[io,],[],0)
 			if not w:
 				if not warned and time.time()-start > 1.0:
-					logger.network('attempting to establish connection','warning')
+					logger.debug('attempting to establish connection','network')
 					warned = True
 				yield False
 				continue
 			err = io.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
 			if not err:
 				if warned:
-					logger.network('connection established','warning')
+					logger.warning('connection established','network')
 				yield True
 				return
 			elif err in error.block:
-				logger.network('connect attempt failed, retrying, reason %s' % errno.errorcode[err],'warning')
+				logger.warning('connect attempt failed, retrying, reason %s' % errno.errorcode[err],'network')
 				yield False
 			else:
 				yield False
