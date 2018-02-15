@@ -47,7 +47,8 @@ def main ():
 	options['--env'] = ''  # exabgp compatibility
 
 	root = root_folder(options,['/bin/exabgpcli','/sbin/exabgpcli','/lib/exabgp/application/cli.py'])
-	etc = root + '/etc/exabgp'
+	prefix = '' if root == '/usr' else root
+	etc = prefix + '/etc/exabgp'
 	envfile = get_envfile(options,etc)
 	env = get_env(envfile)
 	pipename = env['api']['pipename']
@@ -66,7 +67,9 @@ def main ():
 
 	pipes = named_pipe(root)
 	if len(pipes) != 1:
-		sys.stdout.write('Could not find ExaBGP\'s named pipes (%s.in and %s.out) for the cli in any of ' % (pipename,pipename) + ', '.join(pipes))
+		sys.stdout.write('could not find ExaBGP\'s named pipes (%s.in and %s.out) for the cli\n' % (pipename, pipename))
+		sys.stdout.write('we scanned the following folders (the number is your PID):\n - ')
+		sys.stdout.write('\n - '.join(pipes))
 		sys.stdout.flush()
 		sys.exit(1)
 
