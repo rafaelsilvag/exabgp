@@ -67,6 +67,9 @@ class Interrupted (Exception):
 	pass
 
 
+class Stop (Exception):
+	pass
+
 # ======================================================================== Peer
 # Present a File like interface to socket.socket
 
@@ -94,7 +97,8 @@ class Peer (object):
 		self.stats = {
 			'fsm':      self.fsm,
 			'creation': now,
-			'complete': now,
+			'reset': now,
+			'complete': 0,
 		}
 		self.generator = None
 
@@ -103,7 +107,7 @@ class Peer (object):
 		# The peer was restarted (to know what kind of open to send for graceful restart)
 		self._restarted = FORCE_GRACEFUL
 
-		# We want to remove routes which are not in the configuration anymote afte a signal to reload
+		# We want to remove routes which are not in the configuration anymore after a signal to reload
 		self._reconfigure = True
 		# We want to send all the known routes
 		self._resend_routes = SEND.DONE
@@ -122,7 +126,8 @@ class Peer (object):
 		self.stats = {
 			'fsm':      self.fsm,
 			'creation': self.stats['creation'],
-			'complete': self.stats['creation'],
+			'reset':    time.time(),
+			'complete': 0,
 		}
 		if self.proto:
 			self.proto.close(u"peer reset, message [{0}] error[{1}]".format(message, error))
@@ -168,6 +173,14 @@ class Peer (object):
 		}
 		self.neighbor.rib.uncache()
 
+	def remove (self):
+		self._stop("removed")
+		self.stop()
+
+	def shutdown (self):
+		self._stop("shutting down")
+		self.stop()
+
 	def resend (self):
 		self._resend_routes = SEND.NORMAL
 		self._delay.reset()
@@ -196,12 +209,15 @@ class Peer (object):
 	# sockets we must monitor
 
 	def sockets (self):
-		ios = []
-		if self.proto and self.proto.connection and self.proto.connection.io:
-			ios.append(self.proto.connection.io)
-		return ios
+		if self.proto:
+			fd = self.proto.fd()
+			if fd:
+				return [fd]
+		return []
 
 	def handle_connection (self, connection):
+		self.logger.debug("state machine for the peer is %s" % self.fsm.name(), self.id())
+
 		# if the other side fails, we go back to idle
 		if self.fsm == FSM.ESTABLISHED:
 			self.logger.debug('we already have a peer in state established for %s' % connection.name(),self.id())
@@ -224,7 +240,9 @@ class Peer (object):
 
 		# accept the connection
 		if self.proto:
+			self.logger.debug('closing outgoing connection as we have another incoming on with higher router-id for %s' % connection.name(),self.id())
 			self.proto.close('closing outgoing connection as we have another incoming on with higher router-id')
+
 		self.proto = Protocol(self).accept(connection)
 		self.generator = None
 		# Let's make sure we do some work with this connection
@@ -253,14 +271,15 @@ class Peer (object):
 
 		connected = False
 		try:
-			while not connected:
+			for connected in generator:
+				if connected:
+					break
 				if self._teardown:
-					raise StopIteration()
-				connected = six.next(generator)
+					raise Stop()
 				# we want to come back as soon as possible
 				yield ACTION.LATER
 			self.proto = proto
-		except StopIteration:
+		except Stop:
 			# Connection failed
 			if not connected and self.proto:
 				self.proto.close('connection to %s:%d failed' % (self.neighbor.peer_address,self.neighbor.connect))
@@ -695,6 +714,7 @@ class Peer (object):
 		messages['total'] = (total_sent, total_rcvd)
 
 		return {
+			'down':          int(self.stats['reset'] - self.stats['creation']),
 			'duration':      int(time.time() - self.stats['complete']) if self.stats['complete'] else 0,
 			'local-address': str(self.neighbor.local_address),
 			'peer-address':  str(self.neighbor.peer_address),
